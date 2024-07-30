@@ -1,9 +1,7 @@
 # Use the latest Ubuntu LTS as the base image
 FROM ubuntu:20.04
-
 # Set the DEBIAN_FRONTEND to noninteractive to suppress prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
-
 # Update the image and install system packages
 RUN apt-get update && apt-get install -y \
     python3 \
@@ -23,7 +21,6 @@ RUN apt-get update && apt-get install -y \
     xdg-utils \
     fonts-liberation \
     wmctrl
-
 # Install Robot Framework and SeleniumLibrary along with other required Python packages
 RUN pip3 install selenium==4.15.2 \
                  robotframework==6.1.1 \
@@ -34,15 +31,11 @@ RUN pip3 install selenium==4.15.2 \
                  allure-robotframework==2.13.2 \
                  webdrivermanager \
                  pandas
-
 # Set the working directory
 WORKDIR /robot
-
 # Copy the current directory contents into the container at /robot
 COPY . /robot
-
 # Copy the environment JSON file into the container at /robot/Runners/Environment/web_environment.json
 COPY updated_env_web_3.json /robot/Runners/Environment/web_environment.json
-
 # Execute the Robot Framework test cases
 CMD ["robot","/robot/Web/RR/TestCases/Login/login_test.robot"]

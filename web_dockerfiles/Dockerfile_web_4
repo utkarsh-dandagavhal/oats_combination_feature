@@ -36,6 +36,6 @@ WORKDIR /robot
 # Copy the current directory contents into the container at /robot
 COPY . /robot
 # Copy the environment JSON file into the container at /robot/Runners/Environment/web_environment.json
-COPY updated_env_web_2.json /robot/Runners/Environment/web_environment.json
+COPY updated_env_web_4.json /robot/Runners/Environment/web_environment.json
 # Execute the Robot Framework test cases
 CMD ["robot","/robot/Web/RR/TestCases/Login/login_test.robot"]
