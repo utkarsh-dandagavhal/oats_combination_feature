@@ -1,0 +1,83 @@
+name: Build and Run Dockerfiles
+
+on:
+  push:
+    branches:
+      - android
+
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest
+
+    env:
+      BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+      BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Verify DockerHub login
+        run: |
+          echo "Logged in as:"
+          docker info --format '{{json .}}' | jq -r '.IndexServerAddress'
+
+      - name: Build Docker images
+        run: |
+          environments="qa staging prod"
+          image_list=""
+
+          for env in $environments; do
+            echo "Building Docker image for environment: $env"
+            docker build -t android_${env}_image --build-arg BROWSERSTACK_USERNAME=${BROWSERSTACK_USERNAME} --build-arg BROWSERSTACK_ACCESS_KEY=${BROWSERSTACK_ACCESS_KEY} -f android_dockerfiles/Dockerfile_android_$env .
+            
+            if [ $? -ne 0 ]; then
+              echo "Failed to build Docker image for environment: $env"
+              exit 1
+            fi
+
+            image_list="${image_list} android_${env}_image"
+          done
+
+          echo "All Docker images built successfully."
+
+          echo "Image list: $image_list"
+          echo "list=[$image_list]" > android_docker_image_list.txt
+
+      - name: Upload image list artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: android-docker-image-list
+          path: android_docker_image_list.txt
+
+      - name: Download image list artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: android-docker-image-list
+          path: .
+
+      - name: Run Docker containers
+        run: |
+          image_list=$(cat android_docker_image_list.txt | sed 's/list=//' | tr -d '[]')
+          IFS=', ' read -r -a images <<< "$image_list"
+
+          for image in "${images[@]}"; do
+            echo "Running Docker container for image: $image"
+            docker run -d --name container_$image $image
+            
+            if [ $? -ne 0 ]; then
+              echo "Failed to start Docker container for image: $image"
+              exit 1
+            fi
+          done
+
+          echo "All Docker containers started successfully."

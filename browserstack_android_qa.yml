@@ -1,0 +1,32 @@
+userName: pritikakade_mpWqaD
+accessKey: qa4V3paWbWhssYuufqpt
+app: bs://ddea3488fa7b5acb9aa6c273ea05f5ad16cefd4a
+
+platforms:
+
+    - platformName: android
+      deviceName: Samsung Galaxy S22 Ultra
+      platformVersion: 12.0
+            
+
+    - platformName: android
+      deviceName: Google Pixel 7 Pro
+      platformVersion: 13.0
+            
+
+    - platformName: android
+      deviceName: Samsung Galaxy S21 Ultra
+      platformVersion: 11.0
+            
+
+projectName: wm-indexnine-qa-automation
+buildIdentifier: V99.99
+buildName: qa
+buildTag: reg
+parallelsPerPlatform: 1
+CUSTOM_TAG_1: "Test"
+framework: robot
+browserstack.idleTimeout: 300
+interactiveDebugging : true
+browserstack.debug : true
+testObservability: true

@@ -1,0 +1,53 @@
+# Use the official openjdk:8-jdk runtime as a parent image
+FROM openjdk:8-jdk
+
+# Set environment variable to avoid interactive prompts during package installations
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Update package lists and install necessary dependencies
+RUN apt-get update -y && \
+apt-get install -y \
+python3 \
+python3-pip \
+nodejs \
+npm \
+--no-install-recommends && \
+apt-get clean && \
+rm -rf /var/lib/apt/lists/*
+
+# Install Robot Framework and related libraries
+RUN pip3 install --no-cache-dir \
+robotframework-appiumlibrary \
+Appium-Python-Client \
+selenium==4.15.2 \
+robotframework==6.1.1 \
+robotframework-seleniumlibrary==6.2.0 \
+robotframework-retryfailed==0.2.0 \
+robotframework-pabot==2.16.0 \
+openpyxl==3.1.2 \
+allure-robotframework==2.13.2 \
+webdrivermanager \
+pandas \
+requests \
+Pillow \
+robotframework-requests \
+robotframework-doctestlibrary \
+browserstack-sdk
+
+# Set the working directory
+WORKDIR /robot
+
+# Copy the current directory contents into the container at /robot
+COPY . /robot
+
+# Define build arguments for BrowserStack credentials
+ARG BROWSERSTACK_USERNAME
+ARG BROWSERSTACK_ACCESS_KEY
+
+# Set environment variables for BrowserStack
+ENV BROWSERSTACK_USERNAME=${BROWSERSTACK_USERNAME}
+ENV BROWSERSTACK_ACCESS_KEY=${BROWSERSTACK_ACCESS_KEY}
+ENV BROWSERSTACK_CONFIG_FILE="browserstack_android_qa.yml"
+
+# Run the test
+CMD ["browserstack-sdk", "pabot", "Mobile/Android/KC/TestCases/Login/already_registered_user_test.robot"]

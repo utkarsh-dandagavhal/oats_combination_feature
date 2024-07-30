@@ -1,0 +1,46 @@
+{
+  "web": {
+    "env": {
+      "staging": "https://stg-rr.sportz.io/",
+      "qa": "https://stg-rr.sportz.io/",
+      "prod": "https://stg-rr.sportz.io/"
+    },
+    "browser": {
+      "chrome": "chrome",
+      "firefox": "firefox",
+      "edge": "edge"
+    },
+    "window_height": 1920,
+    "window_width": 1080,
+    "receiver_email": "bhakti.kolapkar@indexnine.com"
+  },
+  "android": {
+    "env": {
+      "staging": "bs://ddea3488fa7b5acb9aa6c273ea05f5ad16cefd4a",
+      "qa": "bs://ddea3488fa7b5acb9aa6c273ea05f5ad16cefd4a",
+      "prod": "bs://ddea3488fa7b5acb9aa6c273ea05f5ad16cefd4a"
+    },
+    "device": [
+      {
+        "deviceName": "Samsung Galaxy S22 Ultra",
+        "platformVersion": "12.0"
+      },
+      {
+        "deviceName": "Google Pixel 7 Pro",
+        "platformVersion": "13.0"
+      },
+      {
+        "deviceName": "Samsung Galaxy S21 Ultra",
+        "platformVersion": "11.0"
+      }
+    ],
+    "receiver_email": "bhakti.kolapkar@indexnine.com",
+    "host": "http://127.0.0.1:4723",
+    "application_sdk": "C:\\Users\\Priti\\Desktop\\SI\\wm-indexnine-qa-automation\\Mobile\\Android\\KC\\TestData\\Application\\app-debug.apk",
+    "ignoreHiddenApiPolicyError": "true",
+    "noReset": "false",
+    "automationName": "UiAutomator2",
+    "newCommandTimeout": "600"
+  }
+}
+

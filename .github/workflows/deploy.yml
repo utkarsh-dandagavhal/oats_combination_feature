@@ -1,0 +1,204 @@
+name: Build and Push Multiple Docker Images to AWS ECR
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+  
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Ensure all tags are fetched
+
+      - name: Install dos2unix
+        run: sudo apt-get install -y dos2unix
+
+      - name: Convert line endings
+        run: dos2unix ./build/git_update.sh
+
+      - name: List build directory contents
+        run: ls -alh build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Automatic Tagging of Releases
+        id: increment-git-tag
+        run: |
+          chmod +x ./build/git_update.sh
+          ./build/git_update.sh -v major
+
+      - name: Build, Tag, and Push Images to Amazon ECR
+        id: build-and-push
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: demo
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Find all Dockerfiles in the repository
+          DOCKERFILES=$(find . -name 'Dockerfile*')
+          > image-uris.txt  # Clear or create a file to store image URIs
+          
+          # Loop through the Dockerfiles and build/push images
+          for DOCKERFILE in $DOCKERFILES; do
+            # Extract the name part for tagging
+            BASENAME=$(basename $DOCKERFILE)
+            TAG=${BASENAME//Dockerfile_/}
+            TAG=${TAG:-default}  # Fallback to 'default' if no specific tag
+            
+            IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$TAG-$IMAGE_TAG"
+            
+            echo "Building and pushing Docker image for $DOCKERFILE to $IMAGE_URI"
+            
+            docker build -f $DOCKERFILE -t $IMAGE_URI .
+            docker push $IMAGE_URI
+            
+            echo "IMAGE $IMAGE_URI is pushed to $ECR_REGISTRY/$ECR_REPOSITORY"
+            
+            # Save the image URI to a file
+            echo "$TAG:$IMAGE_URI" >> image-uris.txt
+          done
+
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+          aws --version
+
+      - name: Create Log Group
+        run: |
+          aws logs create-log-group --log-group-name /ecs/my-task || true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Create ECS Cluster
+        run: |
+          aws ecs create-cluster --cluster-name my-cluster --region us-east-1 || true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Register ECS Task Definition
+        id: register-task-def
+        run: |
+          CLUSTER_NAME=my-cluster
+          TASK_DEFINITION_NAME=my-task
+
+          DOCKERFILES=$(find . -name 'Dockerfile*')
+          CONTAINERS_JSON=""
+          PORT=8080  # Starting port for containerPort and hostPort
+          CONTAINER_CPU=256  # CPU units for each container
+          CONTAINER_MEMORY=512  # Memory for each container
+          TOTAL_CPU=0
+          TOTAL_MEMORY=0
+
+          # Read image URIs from the file
+          while IFS=: read -r TAG IMAGE_URI; do
+            CONTAINER_NAME="${TAG}-container"
+
+            TOTAL_CPU=$((TOTAL_CPU + CONTAINER_CPU))
+            TOTAL_MEMORY=$((TOTAL_MEMORY + CONTAINER_MEMORY))
+
+            if [ $TOTAL_CPU -le 1024 ] && [ $TOTAL_MEMORY -le 2048 ]; then
+              CONTAINERS_JSON+="{
+                \"name\": \"$CONTAINER_NAME\",
+                \"image\": \"$IMAGE_URI\",
+                \"essential\": true,
+                \"memory\": $CONTAINER_MEMORY,
+                \"cpu\": $CONTAINER_CPU,
+                \"portMappings\": [
+                  {
+                    \"containerPort\": $PORT,
+                    \"hostPort\": $PORT
+                  }
+                ],
+                \"logConfiguration\": {
+                  \"logDriver\": \"awslogs\",
+                  \"options\": {
+                    \"awslogs-group\": \"/ecs/$TASK_DEFINITION_NAME\",
+                    \"awslogs-region\": \"us-east-1\",
+                    \"awslogs-stream-prefix\": \"$CONTAINER_NAME\"
+                  }
+                }
+              },"
+
+              PORT=$((PORT + 1))  # Increment port for next container
+            else
+              echo "Skipping container $CONTAINER_NAME due to resource limits."
+            fi
+          done < image-uris.txt
+
+          # Remove the trailing comma
+          CONTAINERS_JSON=${CONTAINERS_JSON%,}
+
+          TASK_DEF_JSON="{
+            \"family\": \"$TASK_DEFINITION_NAME\",
+            \"networkMode\": \"awsvpc\",
+            \"containerDefinitions\": [
+              $CONTAINERS_JSON
+            ],
+            \"requiresCompatibilities\": [\"FARGATE\"],
+            \"cpu\": \"1024\",
+            \"memory\": \"2048\",
+            \"executionRoleArn\": \"arn:aws:iam::533267409793:role/ecsTaskExecutionRole\"
+          }"
+
+          echo "$TASK_DEF_JSON" > task-definition.json
+          aws ecs register-task-definition --cli-input-json file://task-definition.json
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+
+      - name: Create or Update ECS Service
+        run: |
+          CLUSTER_NAME=my-cluster
+          SERVICE_NAME=my-service
+          TASK_DEFINITION_NAME=my-task
+
+          # Check if the service already exists
+          SERVICE_EXISTS=$(aws ecs describe-services --cluster $CLUSTER_NAME --services $SERVICE_NAME --query 'services[0].status' --output text --region us-east-1 2>/dev/null || echo "MISSING")
+
+          if [ "$SERVICE_EXISTS" == "MISSING" ]; then
+            # Create the service if it doesn't exist
+            aws ecs create-service \
+              --cluster $CLUSTER_NAME \
+              --service-name $SERVICE_NAME \
+              --task-definition $TASK_DEFINITION_NAME \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[subnet-0bb1c79de3EXAMPLE, subnet-0bb1c79de4EXAMPLE],securityGroups=[sg-0123456789abcdef0],assignPublicIp=ENABLED}" \
+              --region us-east-1
+          else
+            # Update the service if it exists
+            aws ecs update-service \
+              --cluster $CLUSTER_NAME \
+              --service $SERVICE_NAME \
+              --task-definition $TASK_DEFINITION_NAME \
+              --desired-count 1 \
+              --region us-east-1
+          fi
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+
+

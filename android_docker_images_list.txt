@@ -1,0 +1,1 @@
+list=[pritikakade/android_images:android_qa, pritikakade/android_images:android_staging, pritikakade/android_images:android_prod] 
