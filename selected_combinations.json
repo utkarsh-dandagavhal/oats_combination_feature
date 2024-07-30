@@ -1,18 +1,10 @@
 [
     {
         "Browser": "Chrome",
-        "Env": "QA"
-    },
-    {
-        "Browser": "Firefox",
         "Env": "Staging"
     },
     {
-        "Browser": "Edge",
-        "Env": "Prod"
-    },
-    {
-        "Browser": "Chrome",
+        "Browser": "Firefox",
         "Env": "QA"
     }
 ]
